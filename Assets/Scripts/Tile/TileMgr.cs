@@ -64,8 +64,8 @@ public class TileMgr : MonoBehaviour
         m_tiles = new Tile[m_width * m_height];
 
 		//Temporary function
-		//InstantiateTestArea();
-		InstantiateBorders();
+		InstantiateTestArea();
+		//InstantiateBorders();
     }
 
     public Tile GetTile(int x, int y)
