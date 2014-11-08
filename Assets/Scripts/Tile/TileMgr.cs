@@ -20,38 +20,28 @@ public class TileMgr : MonoBehaviour
 		m_tiles[j * m_width + i].SetBlocking(true);
 		m_tiles[j * m_width + i].transform.parent = transform;
 	}
-	
-	//TEMPORARY FUNCTION
-	private void InstantiateTestArea()
-	{
-		for(int i=5; i<26; ++i)
-		{
-			InstantiateTile(i, 7);
-		}
 
-		for(int i=11; i<21; ++i)
-		{
-			InstantiateTile(i, 2);
-		}
-	}
-
-	//TEMPORARY FUNCTION
-	private void InstantiateBorders()
-	{
-		m_height = (uint) GameMgr.instance.m_levelSize * 2;
+    private void Awake()
+    {
+        //Init tilemap size
+		m_height = (uint) LevelMgr.instance.m_levelSize * 2;
 		m_width  = (uint) m_height * 16 / 9;
 
-		for(int i=0; i<m_width; ++i)
+        //Init tile array
+        m_tiles = new Tile[m_width * m_height];
+
+		//Instantiate tiles
+		for(int j=0; j<m_height; ++j)
 		{
-			for(int j=0; j<m_height; ++j)
+			for(int i=0; i<m_width; ++i)
 			{
-				//Instantiate borders blocks
-				if(i == 0 || j == 0 || i == (m_width - 1) || j == (m_height - 1))
+				if(LevelMgr.instance.m_level[(m_height - 1 - j)*m_width + i])
 				{
 					InstantiateTile(i, j);
 				}
 			}
 		}
+<<<<<<< HEAD
 	}
 
     private void Awake()
@@ -66,6 +56,8 @@ public class TileMgr : MonoBehaviour
 		//Temporary function
 		InstantiateTestArea();
 		//InstantiateBorders();
+=======
+>>>>>>> upstream/master
     }
 
     public Tile GetTile(int x, int y)
