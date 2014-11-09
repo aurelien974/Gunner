@@ -41,23 +41,6 @@ public class TileMgr : MonoBehaviour
 				}
 			}
 		}
-<<<<<<< HEAD
-	}
-
-    private void Awake()
-    {
-        //Init tilemap size
-		m_height = (uint) GameMgr.instance.m_levelSize * 2;
-		m_width  = (uint) m_height * 16 / 9;
-
-        //Init tile array
-        m_tiles = new Tile[m_width * m_height];
-
-		//Temporary function
-		InstantiateTestArea();
-		//InstantiateBorders();
-=======
->>>>>>> upstream/master
     }
 
     public Tile GetTile(int x, int y)
