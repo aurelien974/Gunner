@@ -3,6 +3,15 @@ using System.Collections;
 
 public class PlayerControl : MonoBehaviour
 {
+	//Enumeration defining a punch direction
+	private enum ePunchDirection
+	{
+		RIGHT,
+		LEFT, 
+		UP,
+		DOWN
+	};
+
 	//Vertical velocity
 	public float m_gravity	     = 100.0f;
 	public float m_jump		     = 25.0f;
@@ -17,10 +26,29 @@ public class PlayerControl : MonoBehaviour
 	public float m_deaccelX      = 75.0f;
 	public float m_kickBackX	 = 12.0f;
 	public float m_maxVelX       = 12.0f;
-	
+
+	//Punch velocity
+	public float m_punchTime   	  = 0.12f;
+	public float m_punchMinVel 	  = 500.0f;
+	public float m_punchMaxVel    = 2000.0f;
+	public float m_punchReturnVel = 50.0f;
+	public float m_punchForce	  = 2000.0f;
+
+	//Reference to player glove
+	private Transform m_glove = null;
+
+	//Player ID
+	private int m_playerID = 0;
+
 	//Player State
-	private bool m_isGrounded = false;
-	private bool m_analogJump = false;
+	private bool m_isGrounded 	 = false;
+	private bool m_analogJump 	 = false;
+
+	//Punch State
+	private float m_punchElapsed = 0.0f;
+	private Vector2 m_punchDirection;
+	public bool m_punchLaunched  {get; set;}
+	public bool m_punchReturning {get; set;}
 
 	//Input helper variables
 	private bool m_jumpPressed 		 = false;
@@ -33,6 +61,12 @@ public class PlayerControl : MonoBehaviour
 	{
 		//Keep the player from rotating with physics
 		rigidbody2D.fixedAngle = true;
+
+		//Init reference to player glove
+		m_glove = transform.GetChild(0);
+
+		//Init player ID
+		m_playerID = GetComponent<PlayerID>().GetPlayerID();
 	}
 
 	private void Update()
@@ -41,29 +75,29 @@ public class PlayerControl : MonoBehaviour
 		//respond properly in FixedUpdate())
 
 		//Check jump button
-		if(Input.GetButtonDown("Fire1"))
+		if(Input.GetButtonDown("P" + m_playerID.ToString() + " A"))
 		{
 			m_jumpPressed = true;
 		}
-		else if(Input.GetButtonUp("Fire1"))
+		else if(Input.GetButtonUp("P" + m_playerID.ToString() + " A"))
 		{
 			m_jumpReleased = true;
 		}
 
 		//Check left button
-		if(Input.GetButtonDown("Fire2"))
+		if(Input.GetButtonDown("P" + m_playerID.ToString() + " X"))
 		{
 			m_leftPunchPressed = true;
 		}
 
 		//Check right button
-		if(Input.GetButtonDown("Fire3"))
+		if(Input.GetButtonDown("P" + m_playerID.ToString() + " B"))
 		{
 			m_rightPunchPressed = true;
 		}
 
 		//Check up button
-		if(Input.GetButtonDown("Jump"))
+		if(Input.GetButtonDown("P" + m_playerID.ToString() + " Y"))
 		{
 			m_upPunchPressed = true;
 		}
@@ -91,7 +125,7 @@ public class PlayerControl : MonoBehaviour
 		}
 
 		//Check horizontal input
-		Vector2 moveInput = new Vector2(Input.GetAxis("Horizontal"), Input.GetAxis ("Vertical"));
+		Vector2 moveInput = new Vector2(Input.GetAxis("P" + m_playerID.ToString() + " Horizontal"), 0.0f);
 		moveInput.x *= accelX;
 
 		//If player is not moving, or if current velocity is above max value
@@ -133,8 +167,9 @@ public class PlayerControl : MonoBehaviour
 				m_isGrounded = false;
 				m_analogJump = true;
 			}
-			else
+			else if(!m_punchLaunched && !m_punchReturning)
 			{
+				m_punchDirection = LaunchPunch(ePunchDirection.DOWN);
 				rigidbody2D.velocity = new Vector2(rigidbody2D.velocity.x, m_kickBackY);
 			}
 
@@ -162,9 +197,14 @@ public class PlayerControl : MonoBehaviour
 		//Check up punch
 		if(m_upPunchPressed)
 		{
-			if(!m_isGrounded)
+			if(!m_punchLaunched && !m_punchReturning)
 			{
-				rigidbody2D.velocity = new Vector2(rigidbody2D.velocity.x, -m_kickBackY);
+				m_punchDirection = LaunchPunch(ePunchDirection.UP);
+
+				if(!m_isGrounded)
+				{
+					rigidbody2D.velocity = new Vector2(rigidbody2D.velocity.x, -m_kickBackY);
+				}
 			}
 
 			m_upPunchPressed = false;
@@ -173,16 +213,29 @@ public class PlayerControl : MonoBehaviour
 		//Check left punch
 		if(m_leftPunchPressed)
 		{
-			rigidbody2D.velocity -= new Vector2(m_kickBackX, 0.0f);
+			if(!m_punchLaunched && !m_punchReturning)
+			{
+				m_punchDirection = LaunchPunch(ePunchDirection.LEFT);
+				rigidbody2D.velocity += new Vector2(m_kickBackX, 0.0f);
+			}
+
 			m_leftPunchPressed = false;
 		}
 
 		//Check right punch
 		if(m_rightPunchPressed)
 		{
-			rigidbody2D.velocity += new Vector2(m_kickBackX, 0.0f);
+			if(!m_punchLaunched && !m_punchReturning)
+			{
+				m_punchDirection = LaunchPunch(ePunchDirection.RIGHT);
+				rigidbody2D.velocity -= new Vector2(m_kickBackX, 0.0f);
+			}
+
 			m_rightPunchPressed = false;
 		}
+
+		//Update punch movement
+		UpdatePunch();
 
 		//Apply gravity
 		rigidbody2D.velocity -= new Vector2(0.0f, m_gravity * Time.deltaTime);
@@ -190,10 +243,6 @@ public class PlayerControl : MonoBehaviour
 		//Only clamp vertical velocity
 		rigidbody2D.velocity = new Vector2(rigidbody2D.velocity.x,
 		                                   Mathf.Max(rigidbody2D.velocity.y, -m_maxGravity));
-
-		//Clamp velocity to maximum values
-		//rigidbody2D.velocity = new Vector2(Mathf.Clamp(rigidbody2D.velocity.x, -m_maxVelX, m_maxVelX),
-		//                         		   Mathf.Max(rigidbody2D.velocity.y, -m_maxGravity));
 	}
 
 	private void OnCollisionEnter2D(Collision2D collision)
@@ -212,5 +261,85 @@ public class PlayerControl : MonoBehaviour
 				}
 			}
 		}
+	}
+
+	//This method updates the punch velocity, and should only be used in FixedUpdate
+	private void UpdatePunch()
+	{
+		//If punch is launched
+		if(m_punchLaunched)
+		{
+			//Update its speed if it is not done
+			if(m_punchElapsed < m_punchTime)
+			{
+				m_punchElapsed += Time.deltaTime;
+				float speed = Mathf.Lerp(m_punchMinVel, m_punchMaxVel, 1.0f - m_punchElapsed / m_punchTime);
+				m_glove.rigidbody2D.velocity = speed * m_punchDirection * Time.deltaTime;
+			}
+			//Or make it return back to the player
+			else
+			{
+				m_punchLaunched = false;
+				m_punchReturning = true;
+				m_glove.rigidbody2D.velocity = new Vector2(0.0f, 0.0f);
+				m_glove.collider2D.enabled = false;
+			}
+		}
+
+		//If punch is returning
+		if(m_punchReturning)
+		{
+			//Update its position if it is not done
+			if(m_punchReturnVel * Time.deltaTime < m_glove.transform.localPosition.magnitude)
+			{
+				m_glove.transform.localPosition -= m_punchReturnVel * Time.deltaTime * Vector3.Normalize(m_glove.transform.localPosition);
+			}
+			//Or make it available to the player for another shot
+			else
+			{
+				m_punchReturning = false;
+				m_glove.renderer.enabled = false;
+			}
+		}
+	}
+
+	private Vector2 LaunchPunch(ePunchDirection direction)
+	{
+		Vector2 speedDirection = new Vector2();
+
+		//Determine punch direction and local position
+		switch(direction)
+		{
+		case ePunchDirection.DOWN :
+			m_glove.transform.localPosition = new Vector2(0.0f, -1.5f);
+			speedDirection = new Vector2(0.0f, -1.0f);
+			break;
+
+		case ePunchDirection.UP :
+			m_glove.transform.localPosition = new Vector2(0.0f, 1.0f);
+			speedDirection = new Vector2(0.0f, 1.0f);
+			break;
+
+		case ePunchDirection.RIGHT :
+			m_glove.transform.localPosition = new Vector2(1.0f, 0.0f);
+			speedDirection = new Vector2(1.0f, 0.0f);
+			break;
+
+		case ePunchDirection.LEFT :
+			m_glove.transform.localPosition = new Vector2(-1.0f, 0.0f);
+			speedDirection = new Vector2(-1.0f, 0.0f);
+			break;
+
+		default :
+			break;
+		}
+
+		//Init punch parameters
+		m_punchElapsed = 0.0f;
+		m_punchLaunched = true;
+		m_glove.renderer.enabled = true;
+		m_glove.collider2D.enabled = true;
+
+		return speedDirection;
 	}
 }
